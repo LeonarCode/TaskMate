@@ -13,6 +13,7 @@ class UserModel {
   final String? fcmToken;
   final double averageRating;
   final int ratingCount;
+  final String? organization;
 
   const UserModel({
     required this.uid,
@@ -26,6 +27,7 @@ class UserModel {
     this.fcmToken,
     this.averageRating = 0.0,
     this.ratingCount = 0,
+    this.organization,
   });
 
   factory UserModel.fromFirestore(DocumentSnapshot doc) {
@@ -43,6 +45,7 @@ class UserModel {
       fcmToken: data['fcmToken'],
       averageRating: (data['averageRating'] ?? 0.0).toDouble(),
       ratingCount: data['ratingCount'] ?? 0,
+      organization: data['organization'],
     );
   }
 
@@ -57,6 +60,7 @@ class UserModel {
     'fcmToken': fcmToken,
     'averageRating': averageRating,
     'ratingCount': ratingCount,
+    'organization': organization,
   };
 
   UserModel copyWith({
@@ -68,6 +72,7 @@ class UserModel {
     String? fcmToken,
     double? averageRating,
     int? ratingCount,
+    String? organization,
   }) {
     return UserModel(
       uid: uid,
@@ -81,6 +86,7 @@ class UserModel {
       fcmToken: fcmToken ?? this.fcmToken,
       averageRating: averageRating ?? this.averageRating,
       ratingCount: ratingCount ?? this.ratingCount,
+      organization: organization ?? this.organization,
     );
   }
 }

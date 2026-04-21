@@ -19,6 +19,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _fullNameCtrl = TextEditingController();
   final _usernameCtrl = TextEditingController();
   final _ageCtrl = TextEditingController();
+  final _organizationCtrl = TextEditingController();
   UserType _userType = UserType.student;
 
   bool _isLoading = false;
@@ -29,6 +30,7 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
     _fullNameCtrl.dispose();
     _usernameCtrl.dispose();
     _ageCtrl.dispose();
+    _organizationCtrl.dispose();
     super.dispose();
   }
 
@@ -64,6 +66,9 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         username: _usernameCtrl.text.trim().toLowerCase(),
         age: int.parse(_ageCtrl.text.trim()),
         userType: _userType,
+        organization: _organizationCtrl.text.trim().isEmpty 
+            ? null 
+            : _organizationCtrl.text.trim(),
         createdAt: DateTime.now(),
       );
 
@@ -135,6 +140,13 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
                     if (int.tryParse(v) == null) return 'Must be a number';
                     return null;
                   },
+                ),
+                const SizedBox(height: 16),
+                TextFormField(
+                  controller: _organizationCtrl,
+                  decoration: const InputDecoration(
+                    labelText: 'University or Company (Optional)',
+                  ),
                 ),
                 const SizedBox(height: 24),
                 const Text(
