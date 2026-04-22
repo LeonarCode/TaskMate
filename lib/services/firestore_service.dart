@@ -1,4 +1,7 @@
+import 'dart:io';
+import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import '../core/constants.dart';
 import '../models/task_model.dart';
 import '../models/user_model.dart';
@@ -10,15 +13,30 @@ class FirestoreService {
   final _db = FirebaseFirestore.instance;
 
   // ── Tasks ────────────────────────────────────────────────────────────────────
+
+  /// Upserts a task to Firestore using toFirestore() which uses Timestamp.
+  /// Called from TaskProvider._trySyncTask() in the background.
   Future<void> syncTask(TaskModel task) async {
-    await _db.collection(AppStrings.colTasks).doc(task.id).set(task.toFirestore());
+    await _db
+        .collection(AppStrings.colTasks)
+        .doc(task.id)
+        .set(task.toFirestore());
   }
 
+  /// Deletes a task document from Firestore.
+  /// Called after soft delete is confirmed online.
+  Future<void> deleteTask(String taskId) async {
+    await _db.collection(AppStrings.colTasks).doc(taskId).delete();
+  }
+
+  /// Fetches all tasks for a user from Firestore.
+  /// Uses fromFirestore() which correctly parses Timestamp fields.
   Future<List<TaskModel>> fetchUserTasks(String uid) async {
-    final query = await _db
-        .collection(AppStrings.colTasks)
-        .where('uid', isEqualTo: uid)
-        .get();
+    final query =
+        await _db
+            .collection(AppStrings.colTasks)
+            .where('uid', isEqualTo: uid)
+            .get();
     return query.docs.map((doc) => TaskModel.fromFirestore(doc)).toList();
   }
 
@@ -28,14 +46,16 @@ class FirestoreService {
         .collection(AppStrings.colDMs)
         .where('participants', arrayContains: uid)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => DMModel.fromFirestore(doc)).toList());
+        .map(
+          (snap) => snap.docs.map((doc) => DMModel.fromFirestore(doc)).toList(),
+        );
   }
 
   Future<String> getOrCreateDM(String currentUid, String otherUid) async {
     final dmId = DMModel.buildDmId(currentUid, otherUid);
     final docRef = _db.collection(AppStrings.colDMs).doc(dmId);
     final doc = await docRef.get();
-    
+
     if (!doc.exists) {
       await docRef.set({
         'participants': [currentUid, otherUid],
@@ -50,8 +70,12 @@ class FirestoreService {
     await docRef.collection(AppStrings.colMessages).add(message.toFirestore());
 
     final docSnap = await docRef.get();
-    final participants = List<String>.from(docSnap.data()?['participants'] ?? []);
-    final unreadCount = Map<String, int>.from(docSnap.data()?['unreadCount'] ?? {});
+    final participants = List<String>.from(
+      docSnap.data()?['participants'] ?? [],
+    );
+    final unreadCount = Map<String, int>.from(
+      docSnap.data()?['unreadCount'] ?? {},
+    );
 
     for (final p in participants) {
       if (p != message.senderId) {
@@ -73,7 +97,10 @@ class FirestoreService {
         .collection(AppStrings.colMessages)
         .orderBy('timestamp', descending: false)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => MessageModel.fromFirestore(doc)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => MessageModel.fromFirestore(doc)).toList(),
+        );
   }
 
   Future<void> markDMRead(String dmId, String currentUid) async {
@@ -91,16 +118,56 @@ class FirestoreService {
 
   Future<List<UserModel>> searchUsers(String query) async {
     final q = query.toLowerCase();
-    final snap = await _db
-        .collection(AppStrings.colUsers)
-        .where('username', isGreaterThanOrEqualTo: q)
-        .where('username', isLessThanOrEqualTo: '$q\uf8ff')
-        .get();
+    final snap =
+        await _db
+            .collection(AppStrings.colUsers)
+            .where('username', isGreaterThanOrEqualTo: q)
+            .where('username', isLessThanOrEqualTo: '$q\uf8ff')
+            .get();
     return snap.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
   }
 
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {
     await _db.collection(AppStrings.colUsers).doc(uid).update(data);
+  }
+
+  /// Uploads profile image as base64 directly into the Firestore
+  /// user document. Replaces Firebase Storage entirely.
+  ///
+  /// Flow:
+  ///   1. Compress to ~200 KB using flutter_image_compress
+  ///   2. Encode to base64 data URL
+  ///   3. Guard against Firestore 1 MB document size limit
+  ///   4. Save into users/{uid}.photoUrl
+  ///   5. Return data URL for immediate UI use
+  Future<String> uploadProfileImage(String uid, File file) async {
+    final compressed = await FlutterImageCompress.compressWithFile(
+      file.absolute.path,
+      minWidth: 400,
+      minHeight: 400,
+      quality: 60,
+      format: CompressFormat.jpeg,
+    );
+
+    if (compressed == null) {
+      throw Exception(
+        'Image compression failed. The file may be corrupt or an unsupported format.',
+      );
+    }
+
+    final dataUrl = 'data:image/jpeg;base64,${base64Encode(compressed)}';
+
+    if (dataUrl.length > 800000) {
+      throw Exception(
+        'Photo is too large even after compression. Please choose a smaller or lower-resolution image.',
+      );
+    }
+
+    await _db.collection(AppStrings.colUsers).doc(uid).update({
+      'photoUrl': dataUrl,
+    });
+
+    return dataUrl;
   }
 
   // ── Servers ──────────────────────────────────────────────────────────────────
@@ -109,14 +176,20 @@ class FirestoreService {
         .collection(AppStrings.colServers)
         .where('memberIds', arrayContains: uid)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => ServerModel.fromFirestore(doc)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => ServerModel.fromFirestore(doc)).toList(),
+        );
   }
 
   Stream<List<ServerModel>> publicServersStream() {
     return _db
         .collection(AppStrings.colServers)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => ServerModel.fromFirestore(doc)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => ServerModel.fromFirestore(doc)).toList(),
+        );
   }
 
   Future<void> joinServer(String serverId, String uid) async {
@@ -138,6 +211,9 @@ class FirestoreService {
         .doc(uid)
         .collection(AppStrings.colRatings)
         .snapshots()
-        .map((snap) => snap.docs.map((doc) => RatingModel.fromFirestore(doc)).toList());
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => RatingModel.fromFirestore(doc)).toList(),
+        );
   }
 }

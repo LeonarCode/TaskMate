@@ -6,6 +6,7 @@ import '../../models/user_model.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/message_bubble.dart';
+import '../../core/image_utils.dart';
 
 class ChatsScreen extends StatefulWidget {
   const ChatsScreen({super.key});
@@ -192,10 +193,7 @@ class _DMTile extends StatelessWidget {
                     CircleAvatar(
                       radius: 26,
                       backgroundColor: AppColors.purple600.withAlpha(25),
-                      backgroundImage:
-                          other.photoUrl != null
-                              ? NetworkImage(other.photoUrl!)
-                              : null,
+                      backgroundImage: resolvePhoto(other.photoUrl),
                       child:
                           other.photoUrl == null
                               ? Text(
@@ -382,10 +380,7 @@ class _UserSearchSheetState extends State<_UserSearchSheet> {
                   return ListTile(
                     leading: CircleAvatar(
                       backgroundColor: AppColors.purple600.withAlpha(25),
-                      backgroundImage:
-                          user.photoUrl != null
-                              ? NetworkImage(user.photoUrl!)
-                              : null,
+                      backgroundImage: resolvePhoto(user.photoUrl),
                       child:
                           user.photoUrl == null
                               ? Text(
@@ -518,10 +513,7 @@ class _ChatDetailScreenState extends State<ChatDetailScreen> {
             CircleAvatar(
               radius: 18,
               backgroundColor: AppColors.purple600.withAlpha(25),
-              backgroundImage:
-                  widget.otherUser.photoUrl != null
-                      ? NetworkImage(widget.otherUser.photoUrl!)
-                      : null,
+              backgroundImage: resolvePhoto(widget.otherUser.photoUrl),
               child:
                   widget.otherUser.photoUrl == null
                       ? Text(

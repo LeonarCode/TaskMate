@@ -97,20 +97,33 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSaving = true);
 
-    final auth = context.read<AuthProvider>();
-    final taskProv = context.read<TaskProvider>();
-    final uid = auth.firebaseUser!.uid;
+    try {
+      final auth = context.read<AuthProvider>();
+      final taskProv = context.read<TaskProvider>();
+      final uid = auth.firebaseUser!.uid;
 
-    await taskProv.addTask(
-      uid: uid,
-      title: _titleCtrl.text.trim(),
-      description: _descCtrl.text.trim(),
-      deadline: _deadline,
-      priority: _priority,
-      hasAlarm: _hasAlarm,
-    );
+      await taskProv.addTask(
+        uid: uid,
+        title: _titleCtrl.text.trim(),
+        description: _descCtrl.text.trim(),
+        deadline: _deadline,
+        priority: _priority,
+        hasAlarm: _hasAlarm,
+      );
 
-    if (mounted) Navigator.pop(context);
+      if (mounted) Navigator.pop(context);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to add task. Please try again.'),
+            backgroundColor: AppColors.red500,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
   }
 
   @override
@@ -314,7 +327,7 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
                 ),
                 child: Row(
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.alarm_rounded,
                       color: AppColors.purple600,
                       size: 22,

@@ -19,8 +19,8 @@ class LocalDbService {
   }
 
   Future<Database> _initDb() async {
-    // Use FFI for desktop platforms
-    if (!kIsWeb && (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
+    if (!kIsWeb &&
+        (Platform.isWindows || Platform.isLinux || Platform.isMacOS)) {
       sqfliteFfiInit();
       databaseFactory = databaseFactoryFfi;
     }
@@ -30,8 +30,9 @@ class LocalDbService {
 
     return openDatabase(
       path,
-      version: 1,
+      version: 2,
       onCreate: _onCreate,
+      onUpgrade: _onUpgrade,
     );
   }
 
@@ -47,10 +48,19 @@ class LocalDbService {
         priority INTEGER DEFAULT 1,
         hasAlarm INTEGER DEFAULT 1,
         isSynced INTEGER DEFAULT 0,
+        isDeleted INTEGER DEFAULT 0,
         completedAt INTEGER,
         serverId TEXT
       )
     ''');
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      await db.execute(
+        'ALTER TABLE ${AppStrings.tablePersonalTasks} ADD COLUMN isDeleted INTEGER DEFAULT 0',
+      );
+    }
   }
 
   // ── CRUD ────────────────────────────────────────────────────────────────────
@@ -73,7 +83,20 @@ class LocalDbService {
     );
   }
 
-  Future<void> deleteTask(String id) async {
+  /// Soft delete — marks task as deleted and unsynced so it can be
+  /// pushed to Firestore for deletion on next sync.
+  Future<void> softDeleteTask(String id) async {
+    final db = await database;
+    await db.update(
+      AppStrings.tablePersonalTasks,
+      {'isDeleted': 1, 'isSynced': 0},
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+
+  /// Hard delete — permanently removes from SQLite after Firestore confirms.
+  Future<void> hardDeleteTask(String id) async {
     final db = await database;
     await db.delete(
       AppStrings.tablePersonalTasks,
@@ -82,13 +105,25 @@ class LocalDbService {
     );
   }
 
+  /// Returns all non-deleted tasks for a user, sorted by deadline.
   Future<List<TaskModel>> getTasksForUser(String uid) async {
     final db = await database;
     final maps = await db.query(
       AppStrings.tablePersonalTasks,
-      where: 'uid = ?',
+      where: 'uid = ? AND isDeleted = 0',
       whereArgs: [uid],
       orderBy: 'deadline ASC',
+    );
+    return maps.map(TaskModel.fromMap).toList();
+  }
+
+  /// Returns tasks that have been soft-deleted but not yet synced to Firestore.
+  Future<List<TaskModel>> getPendingDeletions(String uid) async {
+    final db = await database;
+    final maps = await db.query(
+      AppStrings.tablePersonalTasks,
+      where: 'uid = ? AND isDeleted = 1 AND isSynced = 0',
+      whereArgs: [uid],
     );
     return maps.map(TaskModel.fromMap).toList();
   }
@@ -97,7 +132,7 @@ class LocalDbService {
     final db = await database;
     final maps = await db.query(
       AppStrings.tablePersonalTasks,
-      where: 'uid = ? AND isSynced = 0',
+      where: 'uid = ? AND isSynced = 0 AND isDeleted = 0',
       whereArgs: [uid],
     );
     return maps.map(TaskModel.fromMap).toList();
@@ -113,6 +148,8 @@ class LocalDbService {
     );
   }
 
+  /// Bulk insert from Firestore — skips tasks that already exist locally
+  /// (including soft-deleted ones) to avoid overwriting local state.
   Future<void> bulkInsert(List<TaskModel> tasks) async {
     final db = await database;
     final batch = db.batch();
@@ -120,7 +157,7 @@ class LocalDbService {
       batch.insert(
         AppStrings.tablePersonalTasks,
         task.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.ignore, // don't overwrite local
+        conflictAlgorithm: ConflictAlgorithm.ignore,
       );
     }
     await batch.commit(noResult: true);

@@ -22,12 +22,10 @@ class NotificationService {
     if (_initialized) return;
     tz_data.initializeTimeZones();
 
-    // Android settings
     const androidSettings = AndroidInitializationSettings(
       '@mipmap/ic_launcher',
     );
 
-    // iOS settings
     const iosSettings = DarwinInitializationSettings(
       requestAlertPermission: true,
       requestBadgePermission: true,
@@ -41,8 +39,7 @@ class NotificationService {
 
     await _plugin.initialize(initSettings);
 
-    // Create Android notification channel
-    if (!kIsWeb && (Platform.isAndroid)) {
+    if (!kIsWeb && Platform.isAndroid) {
       await _plugin
           .resolvePlatformSpecificImplementation<
             AndroidFlutterLocalNotificationsPlugin
@@ -69,7 +66,29 @@ class NotificationService {
               .resolvePlatformSpecificImplementation<
                 AndroidFlutterLocalNotificationsPlugin
               >();
-      return await android?.requestNotificationsPermission() ?? false;
+
+      // Request notification permission (Android 13+)
+      final notifGranted =
+          await android?.requestNotificationsPermission() ?? false;
+
+      // Request exact alarm permission (Android 12+)
+      final exactGranted =
+          await android?.requestExactAlarmsPermission() ?? false;
+
+      return notifGranted && exactGranted;
+    }
+    return true;
+  }
+
+  /// Check if exact alarms are permitted (Android 12+)
+  Future<bool> _canScheduleExactAlarms() async {
+    if (!kIsWeb && Platform.isAndroid) {
+      final android =
+          _plugin
+              .resolvePlatformSpecificImplementation<
+                AndroidFlutterLocalNotificationsPlugin
+              >();
+      return await android?.canScheduleExactNotifications() ?? false;
     }
     return true;
   }
@@ -103,8 +122,6 @@ class NotificationService {
   }
 
   // ── Schedule task reminders ─────────────────────────────────────────────────
-  /// Schedules 3 daily reminders starting 3 days before the deadline.
-  /// Each day gets morning (8AM), afternoon (2PM), evening (8PM) reminders.
   Future<void> scheduleTaskReminders(TaskModel task) async {
     if (!task.hasAlarm) return;
     await cancelTaskReminders(task.id);
@@ -112,7 +129,6 @@ class NotificationService {
     final now = DateTime.now();
     final deadline = task.deadline;
 
-    // Schedule reminders for days: deadline-3, deadline-2, deadline-1, deadline
     for (int daysOffset = 3; daysOffset >= 0; daysOffset--) {
       final day = deadline.subtract(Duration(days: daysOffset));
 
@@ -133,8 +149,7 @@ class NotificationService {
             id: notifId,
             title: '⏰ Task Reminder: ${task.title}',
             body:
-                '$daysLabel at ${_formatHour(hour)} — Deadline: '
-                '${_formatDate(deadline)}',
+                '$daysLabel at ${_formatHour(hour)} — Deadline: ${_formatDate(deadline)}',
             scheduledDate: scheduledTime,
           );
         }
@@ -143,7 +158,6 @@ class NotificationService {
   }
 
   Future<void> cancelTaskReminders(String taskId) async {
-    // Cancel all 12 possible notifications (4 days × 3 times)
     for (int d = 0; d <= 3; d++) {
       for (int h = 0; h < 3; h++) {
         await _plugin.cancel(_buildNotifId(taskId, d, h));
@@ -163,6 +177,13 @@ class NotificationService {
     required DateTime scheduledDate,
   }) async {
     final tzDate = tz.TZDateTime.from(scheduledDate, tz.local);
+
+    // Use exact alarm only if permitted, otherwise fall back to inexact
+    final canExact = await _canScheduleExactAlarms();
+    final scheduleMode =
+        canExact
+            ? AndroidScheduleMode.exactAllowWhileIdle
+            : AndroidScheduleMode.inexactAllowWhileIdle;
 
     await _plugin.zonedSchedule(
       id,
@@ -184,14 +205,13 @@ class NotificationService {
           presentSound: true,
         ),
       ),
-      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      androidScheduleMode: scheduleMode,
       uiLocalNotificationDateInterpretation:
           UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
   int _buildNotifId(String taskId, int daysOffset, int hourIndex) {
-    // Use hashCode to get a stable int per task
     final base = taskId.hashCode.abs() % 100000;
     return base * 100 + daysOffset * 10 + hourIndex;
   }

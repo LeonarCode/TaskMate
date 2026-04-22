@@ -66,15 +66,25 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
         username: _usernameCtrl.text.trim().toLowerCase(),
         age: int.parse(_ageCtrl.text.trim()),
         userType: _userType,
-        organization: _organizationCtrl.text.trim().isEmpty 
-            ? null 
-            : _organizationCtrl.text.trim(),
+        organization:
+            _organizationCtrl.text.trim().isEmpty
+                ? null
+                : _organizationCtrl.text.trim(),
         createdAt: DateTime.now(),
       );
 
       await authProv.completeProfile(user);
+      if (mounted && authProv.error != null) {
+        setState(() => _error = authProv.error);
+      }
     } catch (e) {
-      setState(() => _error = 'Failed to setup profile');
+      setState(
+        () =>
+            _error =
+                e.toString().contains('permission-denied')
+                    ? 'Network or Permission Error. Try again.'
+                    : e.toString(),
+      );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }

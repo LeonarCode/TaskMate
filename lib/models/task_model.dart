@@ -10,9 +10,10 @@ class TaskModel {
   final bool isCompleted;
   final TaskPriority priority;
   final bool hasAlarm;
-  final bool isSynced; // false = local only
+  final bool isSynced;
+  final bool isDeleted; // ← NEW: soft delete flag
   final DateTime? completedAt;
-  final String? serverId; // null = personal task
+  final String? serverId;
 
   const TaskModel({
     required this.id,
@@ -24,30 +25,35 @@ class TaskModel {
     this.priority = TaskPriority.medium,
     this.hasAlarm = true,
     this.isSynced = false,
+    this.isDeleted = false, // ← NEW
     this.completedAt,
     this.serverId,
   });
 
   // ── SQLite ──────────────────────────────────────────────────────────────────
+  // Explicit casting on every field — prevents R8/ProGuard silent failures
+  // in release builds where type inference can break
   factory TaskModel.fromMap(Map<String, dynamic> map) {
     return TaskModel(
-      id: map['id'],
-      uid: map['uid'],
-      title: map['title'],
-      description: map['description'] ?? '',
-      deadline: DateTime.fromMillisecondsSinceEpoch(map['deadline']),
-      isCompleted: map['isCompleted'] == 1,
-      priority: TaskPriority.values[map['priority'] ?? 1],
-      hasAlarm: map['hasAlarm'] == 1,
-      isSynced: map['isSynced'] == 1,
+      id: map['id'] as String,
+      uid: map['uid'] as String,
+      title: map['title'] as String,
+      description: map['description'] as String? ?? '',
+      deadline: DateTime.fromMillisecondsSinceEpoch(map['deadline'] as int),
+      isCompleted: (map['isCompleted'] as int? ?? 0) == 1,
+      priority: TaskPriority.values[map['priority'] as int? ?? 1],
+      hasAlarm: (map['hasAlarm'] as int? ?? 1) == 1,
+      isSynced: (map['isSynced'] as int? ?? 0) == 1,
+      isDeleted: (map['isDeleted'] as int? ?? 0) == 1, // ← NEW
       completedAt:
           map['completedAt'] != null
-              ? DateTime.fromMillisecondsSinceEpoch(map['completedAt'])
+              ? DateTime.fromMillisecondsSinceEpoch(map['completedAt'] as int)
               : null,
-      serverId: map['serverId'],
+      serverId: map['serverId'] as String?,
     );
   }
 
+  // toMap() is used for SQLite — booleans stored as int (0/1)
   Map<String, dynamic> toMap() => {
     'id': id,
     'uid': uid,
@@ -58,28 +64,32 @@ class TaskModel {
     'priority': priority.index,
     'hasAlarm': hasAlarm ? 1 : 0,
     'isSynced': isSynced ? 1 : 0,
+    'isDeleted': isDeleted ? 1 : 0, // ← NEW
     'completedAt': completedAt?.millisecondsSinceEpoch,
     'serverId': serverId,
   };
 
   // ── Firestore ───────────────────────────────────────────────────────────────
+  // Uses Timestamp (not millisecondsSinceEpoch) — consistent with toFirestore()
   factory TaskModel.fromFirestore(DocumentSnapshot doc) {
     final data = doc.data() as Map<String, dynamic>;
     return TaskModel(
       id: doc.id,
-      uid: data['uid'] ?? '',
-      title: data['title'] ?? '',
-      description: data['description'] ?? '',
+      uid: data['uid'] as String? ?? '',
+      title: data['title'] as String? ?? '',
+      description: data['description'] as String? ?? '',
       deadline: (data['deadline'] as Timestamp).toDate(),
-      isCompleted: data['isCompleted'] ?? false,
-      priority: TaskPriority.values[data['priority'] ?? 1],
-      hasAlarm: data['hasAlarm'] ?? true,
+      isCompleted: data['isCompleted'] as bool? ?? false,
+      priority: TaskPriority.values[data['priority'] as int? ?? 1],
+      hasAlarm: data['hasAlarm'] as bool? ?? true,
       isSynced: true,
+      isDeleted: false, // Firestore docs are never soft-deleted locally
       completedAt: (data['completedAt'] as Timestamp?)?.toDate(),
-      serverId: data['serverId'],
+      serverId: data['serverId'] as String?,
     );
   }
 
+  // toFirestore() — uses Timestamp, booleans stay as bool (not 0/1)
   Map<String, dynamic> toFirestore() => {
     'uid': uid,
     'title': title,
@@ -88,6 +98,7 @@ class TaskModel {
     'isCompleted': isCompleted,
     'priority': priority.index,
     'hasAlarm': hasAlarm,
+    'isSynced': true,
     'completedAt':
         completedAt != null ? Timestamp.fromDate(completedAt!) : null,
     'serverId': serverId,
@@ -101,6 +112,7 @@ class TaskModel {
     TaskPriority? priority,
     bool? hasAlarm,
     bool? isSynced,
+    bool? isDeleted, // ← NEW
     DateTime? completedAt,
     String? serverId,
   }) {
@@ -114,16 +126,14 @@ class TaskModel {
       priority: priority ?? this.priority,
       hasAlarm: hasAlarm ?? this.hasAlarm,
       isSynced: isSynced ?? this.isSynced,
+      isDeleted: isDeleted ?? this.isDeleted, // ← NEW
       completedAt: completedAt ?? this.completedAt,
       serverId: serverId ?? this.serverId,
     );
   }
 
-  /// Days until deadline
   int get daysUntilDeadline => deadline.difference(DateTime.now()).inDays;
-
   bool get isOverdue => !isCompleted && deadline.isBefore(DateTime.now());
-
   bool get isDueSoon =>
       !isCompleted && daysUntilDeadline <= 3 && daysUntilDeadline >= 0;
 }

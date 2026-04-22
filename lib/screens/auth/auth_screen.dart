@@ -75,25 +75,12 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
     } else {
       await auth.registerWithEmail(_emailCtrl.text.trim(), _passwordCtrl.text);
     }
-
-    if (mounted && auth.error != null) {
-      _showError(auth.error!);
-    }
   }
 
   Future<void> _handleGoogleSignIn() async {
     final auth = context.read<AuthProvider>();
     auth.clearError();
     await auth.signInWithGoogle();
-    if (mounted && auth.error != null) {
-      _showError(auth.error!);
-    }
-  }
-
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: AppColors.red500),
-    );
   }
 
   void _showForgotPassword() {
@@ -282,6 +269,37 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
             const SizedBox(height: 20),
             _buildDivider(isDark),
             const SizedBox(height: 20),
+            if (auth.error != null) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppColors.red500.withAlpha(25),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.red500.withAlpha(80)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.error_outline_rounded,
+                      color: AppColors.red500,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        auth.error!,
+                        style: const TextStyle(
+                          color: AppColors.red500,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+            ],
             // Email field
             _buildField(
               controller: _emailCtrl,

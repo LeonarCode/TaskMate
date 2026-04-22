@@ -55,22 +55,29 @@ class TaskProvider extends ChangeNotifier {
 
   Future<void> _syncFromFirestore(String uid) async {
     try {
-      // Push unsynced local tasks
+      // 1. Push pending deletions to Firestore first, then hard-delete locally
+      final pendingDeletions = await _localDb.getPendingDeletions(uid);
+      for (final task in pendingDeletions) {
+        await _firestore.deleteTask(task.id);
+        await _localDb.hardDeleteTask(task.id);
+      }
+
+      // 2. Push unsynced local tasks
       final unsyncedTasks = await _localDb.getUnsyncedTasks(uid);
       for (final task in unsyncedTasks) {
         await _firestore.syncTask(task);
         await _localDb.markSynced(task.id);
       }
 
-      // Pull from Firestore
+      // 3. Pull from Firestore
       final remoteTasks = await _firestore.fetchUserTasks(uid);
       await _localDb.bulkInsert(remoteTasks);
 
-      // Reload from local (single source of truth)
+      // 4. Reload from local (single source of truth)
       _tasks = await _localDb.getTasksForUser(uid);
       notifyListeners();
     } catch (_) {
-      // Offline — keep local data
+      // Offline or sync error — keep local data as-is
     }
   }
 
@@ -95,7 +102,7 @@ class TaskProvider extends ChangeNotifier {
       isSynced: false,
     );
 
-    // Save locally
+    // Save locally and update UI immediately
     await _localDb.insertTask(task);
     _tasks.add(task);
     _tasks.sort((a, b) => a.deadline.compareTo(b.deadline));
@@ -106,7 +113,7 @@ class TaskProvider extends ChangeNotifier {
       await _notif.scheduleTaskReminders(task);
     }
 
-    // Sync to Firestore if online
+    // Sync to Firestore in background — don't block UI
     _trySyncTask(task);
   }
 
@@ -139,7 +146,6 @@ class TaskProvider extends ChangeNotifier {
 
     await updateTask(updated);
 
-    // Cancel reminders if completed
     if (updated.isCompleted) {
       await _notif.cancelTaskReminders(taskId);
     }
@@ -147,10 +153,29 @@ class TaskProvider extends ChangeNotifier {
 
   // ── Delete task ──────────────────────────────────────────────────────────────
   Future<void> deleteTask(String taskId) async {
-    await _localDb.deleteTask(taskId);
+    // Soft delete locally — persists the deletion intent for sync
+    await _localDb.softDeleteTask(taskId);
     await _notif.cancelTaskReminders(taskId);
+
+    // Remove from UI immediately
     _tasks.removeWhere((t) => t.id == taskId);
     notifyListeners();
+
+    // Try to sync deletion now if online; otherwise it will be retried
+    // on the next loadTasks → _syncFromFirestore call
+    _trySyncDeletion(taskId);
+  }
+
+  Future<void> _trySyncDeletion(String taskId) async {
+    try {
+      final connectivity = await Connectivity().checkConnectivity();
+      if (connectivity.first != ConnectivityResult.none) {
+        await _firestore.deleteTask(taskId);
+        await _localDb.hardDeleteTask(taskId); // Clean up after confirmed
+      }
+    } catch (_) {
+      // Will retry on next _syncFromFirestore
+    }
   }
 
   Future<void> _trySyncTask(TaskModel task) async {
@@ -161,7 +186,7 @@ class TaskProvider extends ChangeNotifier {
         await _localDb.markSynced(task.id);
       }
     } catch (_) {
-      // Will sync on next load
+      // Will sync on next loadTasks
     }
   }
 

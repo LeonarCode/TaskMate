@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../core/theme.dart';
 import '../models/message_model.dart';
 import 'package:intl/intl.dart';
+import '../core/image_utils.dart';
 
 class MessageBubble extends StatelessWidget {
   final MessageModel message;
@@ -23,10 +24,7 @@ class MessageBubble extends StatelessWidget {
             CircleAvatar(
               radius: 16,
               backgroundColor: AppColors.purple600.withAlpha(25),
-              backgroundImage:
-                  message.senderPhotoUrl != null
-                      ? NetworkImage(message.senderPhotoUrl!)
-                      : null,
+              backgroundImage: resolvePhoto(message.senderPhotoUrl),
               child:
                   message.senderPhotoUrl == null
                       ? Text(

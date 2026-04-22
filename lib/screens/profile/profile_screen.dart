@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
@@ -10,9 +11,19 @@ import '../../providers/auth_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../services/firestore_service.dart';
 import '../../widgets/gradient_button.dart';
+import '../../core/image_utils.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  // Single FirestoreService instance for the widget's lifetime.
+  // Prevents stream re-subscriptions and orphaned upload sessions.
+  final _firestoreSvc = FirestoreService();
 
   @override
   Widget build(BuildContext context) {
@@ -40,7 +51,11 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildHeader(
-      BuildContext ctx, bool isDark, UserModel user, AuthProvider auth) {
+    BuildContext ctx,
+    bool isDark,
+    UserModel user,
+    AuthProvider auth,
+  ) {
     return SliverAppBar(
       expandedHeight: 240,
       pinned: true,
@@ -48,20 +63,18 @@ class ProfileScreen extends StatelessWidget {
       flexibleSpace: FlexibleSpaceBar(
         background: Container(
           decoration: BoxDecoration(
-            gradient: isDark
-                ? LinearGradient(
-                    colors: [AppColors.dark800, AppColors.dark700],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  )
-                : LinearGradient(
-                    colors: [
-                      AppColors.purple600,
-                      AppColors.pink500,
-                    ],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+            gradient:
+                isDark
+                    ? const LinearGradient(
+                      colors: [AppColors.dark800, AppColors.dark700],
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                    )
+                    : const LinearGradient(
+                      colors: [AppColors.purple600, AppColors.pink500],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
           ),
           child: SafeArea(
             child: Column(
@@ -74,22 +87,22 @@ class ProfileScreen extends StatelessWidget {
                     CircleAvatar(
                       radius: 50,
                       backgroundColor: Colors.white.withAlpha(40),
-                      backgroundImage: user.photoUrl != null
-                          ? NetworkImage(user.photoUrl!)
-                          : null,
-                      child: user.photoUrl == null
-                          ? Text(
-                              user.fullName.characters.first.toUpperCase(),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 40,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            )
-                          : null,
+                      // ✅ Handles both base64 data URLs and remote http URLs
+                      backgroundImage: resolvePhoto(user.photoUrl),
+                      child:
+                          user.photoUrl == null
+                              ? Text(
+                                user.fullName.characters.first.toUpperCase(),
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 40,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              )
+                              : null,
                     ),
                     GestureDetector(
-                      onTap: () => _changePhoto(ctx, user),
+                      onTap: () => _changePhoto(ctx, user, auth),
                       child: Container(
                         width: 32,
                         height: 32,
@@ -103,8 +116,11 @@ class ProfileScreen extends StatelessWidget {
                             ),
                           ],
                         ),
-                        child: const Icon(Icons.camera_alt_rounded,
-                            size: 18, color: AppColors.purple600),
+                        child: const Icon(
+                          Icons.camera_alt_rounded,
+                          size: 18,
+                          color: AppColors.purple600,
+                        ),
                       ),
                     ),
                   ],
@@ -132,8 +148,11 @@ class ProfileScreen extends StatelessWidget {
                   children: [
                     RatingBarIndicator(
                       rating: user.averageRating,
-                      itemBuilder: (_, __) =>
-                          const Icon(Icons.star_rounded, color: AppColors.amber400),
+                      itemBuilder:
+                          (_, __) => const Icon(
+                            Icons.star_rounded,
+                            color: AppColors.amber400,
+                          ),
                       itemCount: 5,
                       itemSize: 20,
                       unratedColor: Colors.white.withAlpha(80),
@@ -156,13 +175,17 @@ class ProfileScreen extends StatelessWidget {
       ),
       actions: [
         IconButton(
-          icon: Icon(isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-              color: isDark ? Colors.white : AppColors.gray700),
+          icon: Icon(
+            isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+            color: isDark ? Colors.white : AppColors.gray700,
+          ),
           onPressed: () => ctx.read<ThemeProvider>().toggleTheme(),
         ),
         IconButton(
-          icon: Icon(Icons.logout_rounded,
-              color: isDark ? Colors.white : AppColors.gray700),
+          icon: Icon(
+            Icons.logout_rounded,
+            color: isDark ? Colors.white : AppColors.gray700,
+          ),
           onPressed: () => _confirmSignOut(ctx, auth),
         ),
       ],
@@ -170,15 +193,16 @@ class ProfileScreen extends StatelessWidget {
   }
 
   Widget _buildBody(
-      BuildContext ctx, bool isDark, UserModel user, AuthProvider auth) {
-    final firestoreSvc = FirestoreService();
-
+    BuildContext ctx,
+    bool isDark,
+    UserModel user,
+    AuthProvider auth,
+  ) {
     return Padding(
       padding: const EdgeInsets.all(16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Info card
           _sectionTitle('Profile Info', isDark),
           const SizedBox(height: 10),
           _infoCard(isDark, [
@@ -201,13 +225,15 @@ class ProfileScreen extends StatelessWidget {
               color: AppColors.amber500,
             ),
             _InfoRow(
-              icon: user.userType == UserType.student
-                  ? Icons.school_rounded
-                  : Icons.work_rounded,
+              icon:
+                  user.userType == UserType.student
+                      ? Icons.school_rounded
+                      : Icons.work_rounded,
               label: 'Type',
-              value: user.userType == UserType.student
-                  ? '🎓 Student'
-                  : '💼 Employee',
+              value:
+                  user.userType == UserType.student
+                      ? '🎓 Student'
+                      : '💼 Employee',
               color: AppColors.green500,
             ),
             _InfoRow(
@@ -219,28 +245,30 @@ class ProfileScreen extends StatelessWidget {
           ]),
           const SizedBox(height: 24),
 
-          // Ratings received
           _sectionTitle('Ratings & Feedback', isDark),
           const SizedBox(height: 10),
           StreamBuilder<List<RatingModel>>(
-            stream: firestoreSvc.userRatingsStream(user.uid),
+            stream: _firestoreSvc.userRatingsStream(user.uid),
             builder: (_, snap) {
               final ratings = snap.data ?? [];
               if (ratings.isEmpty) {
                 return _emptySection(
-                    'No ratings yet', Icons.star_border_rounded, isDark);
+                  'No ratings yet',
+                  Icons.star_border_rounded,
+                  isDark,
+                );
               }
               return Column(
-                children: ratings
-                    .take(5)
-                    .map((r) => _RatingTile(rating: r, isDark: isDark))
-                    .toList(),
+                children:
+                    ratings
+                        .take(5)
+                        .map((r) => _RatingTile(rating: r, isDark: isDark))
+                        .toList(),
               );
             },
           ),
           const SizedBox(height: 24),
 
-          // Edit profile button
           GradientButton(
             label: 'Edit Profile',
             icon: Icons.edit_rounded,
@@ -269,79 +297,80 @@ class ProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.dark800 : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: isDark
-            ? Border.all(color: AppColors.dark600, width: 1)
-            : null,
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
+        border: isDark ? Border.all(color: AppColors.dark600, width: 1) : null,
+        boxShadow:
+            isDark
+                ? null
+                : [
+                  BoxShadow(
                     color: Colors.black.withAlpha(8),
                     blurRadius: 12,
-                    offset: const Offset(0, 2))
-              ],
+                    offset: const Offset(0, 2),
+                  ),
+                ],
       ),
       child: Column(
-        children: rows.asMap().entries.map((e) {
-          final isLast = e.key == rows.length - 1;
-          final row = e.value;
-          return Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 16, vertical: 14),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: row.color.withAlpha(25),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child:
-                          Icon(row.icon, color: row.color, size: 18),
+        children:
+            rows.asMap().entries.map((e) {
+              final isLast = e.key == rows.length - 1;
+              final row = e.value;
+              return Column(
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 14,
                     ),
-                    const SizedBox(width: 12),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
                       children: [
-                        Text(
-                          row.label,
-                          style: TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? AppColors.gray500
-                                : AppColors.gray400,
-                            letterSpacing: 0.3,
+                        Container(
+                          width: 36,
+                          height: 36,
+                          decoration: BoxDecoration(
+                            color: row.color.withAlpha(25),
+                            borderRadius: BorderRadius.circular(10),
                           ),
+                          child: Icon(row.icon, color: row.color, size: 18),
                         ),
-                        Text(
-                          row.value,
-                          style: TextStyle(
-                            fontSize: 15,
-                            fontWeight: FontWeight.w600,
-                            color: isDark
-                                ? Colors.white
-                                : AppColors.gray800,
-                          ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              row.label,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    isDark
+                                        ? AppColors.gray500
+                                        : AppColors.gray400,
+                                letterSpacing: 0.3,
+                              ),
+                            ),
+                            Text(
+                              row.value,
+                              style: TextStyle(
+                                fontSize: 15,
+                                fontWeight: FontWeight.w600,
+                                color:
+                                    isDark ? Colors.white : AppColors.gray800,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
-                ),
-              ),
-              if (!isLast)
-                Divider(
-                  height: 1,
-                  color:
-                      isDark ? AppColors.dark600 : AppColors.gray100,
-                  indent: 64,
-                ),
-            ],
-          );
-        }).toList(),
+                  ),
+                  if (!isLast)
+                    Divider(
+                      height: 1,
+                      color: isDark ? AppColors.dark600 : AppColors.gray100,
+                      indent: 64,
+                    ),
+                ],
+              );
+            }).toList(),
       ),
     );
   }
@@ -352,16 +381,16 @@ class ProfileScreen extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.dark800 : Colors.white,
         borderRadius: BorderRadius.circular(16),
-        border: isDark
-            ? Border.all(color: AppColors.dark600, width: 1)
-            : null,
+        border: isDark ? Border.all(color: AppColors.dark600, width: 1) : null,
       ),
       child: Center(
         child: Column(
           children: [
-            Icon(icon,
-                size: 32,
-                color: isDark ? AppColors.gray600 : AppColors.gray300),
+            Icon(
+              icon,
+              size: 32,
+              color: isDark ? AppColors.gray600 : AppColors.gray300,
+            ),
             const SizedBox(height: 8),
             Text(
               msg,
@@ -376,48 +405,76 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _changePhoto(BuildContext ctx, UserModel user) async {
+  Future<void> _changePhoto(
+    BuildContext ctx,
+    UserModel user,
+    AuthProvider auth,
+  ) async {
     final picker = ImagePicker();
-    final file =
-        await picker.pickImage(source: ImageSource.gallery, imageQuality: 75);
-    if (file == null) return;
-    // TODO: upload to Firebase Storage and update photoUrl
+    final xFile = await picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 75,
+    );
+    if (xFile == null) return;
+
     if (ctx.mounted) {
-      ScaffoldMessenger.of(ctx).showSnackBar(
-        const SnackBar(content: Text('Photo update coming soon!')),
-      );
+      ScaffoldMessenger.of(
+        ctx,
+      ).showSnackBar(const SnackBar(content: Text('Uploading photo...')));
+    }
+
+    try {
+      final file = File(xFile.path);
+      // uploadProfileImage compresses → base64 encodes → saves to Firestore
+      // No Firebase Storage or billing account required
+      await _firestoreSvc.uploadProfileImage(user.uid, file);
+      await auth.refreshUser();
+
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(
+          ctx,
+        ).showSnackBar(const SnackBar(content: Text('Profile photo updated!')));
+      }
+    } catch (e) {
+      if (ctx.mounted) {
+        ScaffoldMessenger.of(
+          ctx,
+        ).showSnackBar(SnackBar(content: Text('Failed to upload photo: $e')));
+      }
     }
   }
 
   void _confirmSignOut(BuildContext ctx, AuthProvider auth) {
     showDialog(
       context: ctx,
-      builder: (_) => AlertDialog(
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+      builder:
+          (_) => AlertDialog(
+            title: const Text('Sign Out'),
+            content: const Text('Are you sure you want to sign out?'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              TextButton(
+                onPressed: () {
+                  Navigator.pop(ctx);
+                  auth.signOut();
+                },
+                style: TextButton.styleFrom(foregroundColor: AppColors.red500),
+                child: const Text('Sign Out'),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              auth.signOut();
-            },
-            style: TextButton.styleFrom(foregroundColor: AppColors.red500),
-            child: const Text('Sign Out'),
-          ),
-        ],
-      ),
     );
   }
 
-  void _showEditProfile(
-      BuildContext ctx, UserModel user, AuthProvider auth) {
+  void _showEditProfile(BuildContext ctx, UserModel user, AuthProvider auth) {
     final nameCtrl = TextEditingController(text: user.fullName);
     final ageCtrl = TextEditingController(text: '${user.age}');
     UserType userType = user.userType;
+    bool isLoading = false;
+    String? error;
 
     showModalBottomSheet(
       context: ctx,
@@ -425,185 +482,252 @@ class ProfileScreen extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (bCtx) {
         final isDark = Theme.of(bCtx).brightness == Brightness.dark;
-        return StatefulBuilder(builder: (bCtx, setSheetState) {
-          return Container(
-            padding: EdgeInsets.fromLTRB(
+        return StatefulBuilder(
+          builder: (bCtx, setSheetState) {
+            return Container(
+              padding: EdgeInsets.fromLTRB(
                 24,
                 20,
                 24,
-                24 + MediaQuery.of(bCtx).viewInsets.bottom),
-            decoration: BoxDecoration(
-              color: isDark ? AppColors.dark800 : Colors.white,
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(28)),
-            ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    margin: const EdgeInsets.only(bottom: 20),
-                    decoration: BoxDecoration(
-                        color: isDark
-                            ? AppColors.dark500
-                            : AppColors.gray200,
-                        borderRadius: BorderRadius.circular(2)),
-                  ),
+                24 + MediaQuery.of(bCtx).viewInsets.bottom,
+              ),
+              decoration: BoxDecoration(
+                color: isDark ? AppColors.dark800 : Colors.white,
+                borderRadius: const BorderRadius.vertical(
+                  top: Radius.circular(28),
                 ),
-                Text(
-                  'Edit Profile',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.w900,
-                    color: isDark ? Colors.white : AppColors.gray900,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 20),
+                      decoration: BoxDecoration(
+                        color: isDark ? AppColors.dark500 : AppColors.gray200,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                TextField(
-                  controller: nameCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Full Name',
-                    prefixIcon: Icon(Icons.badge_rounded,
-                        color: AppColors.purple600),
+                  Text(
+                    'Edit Profile',
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: isDark ? Colors.white : AppColors.gray900,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 14),
-                TextField(
-                  controller: ageCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                    labelText: 'Age',
-                    prefixIcon: Icon(Icons.cake_rounded,
-                        color: AppColors.amber500),
+                  const SizedBox(height: 20),
+                  if (error != null)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      margin: const EdgeInsets.only(bottom: 16),
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        color: AppColors.red500.withAlpha(20),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Text(
+                        error!,
+                        style: const TextStyle(color: AppColors.red500),
+                      ),
+                    ),
+                  TextField(
+                    controller: nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Full Name',
+                      prefixIcon: Icon(
+                        Icons.badge_rounded,
+                        color: AppColors.purple600,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                Text('User Type',
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: ageCtrl,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(
+                      labelText: 'Age',
+                      prefixIcon: Icon(
+                        Icons.cake_rounded,
+                        color: AppColors.amber500,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'User Type',
                     style: TextStyle(
                       fontSize: 13,
                       fontWeight: FontWeight.w700,
                       color: isDark ? AppColors.gray200 : AppColors.gray700,
-                    )),
-                const SizedBox(height: 8),
-                Row(children: [
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () =>
-                          setSheetState(() => userType = UserType.student),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          gradient: userType == UserType.student
-                              ? AppColors.primaryGradient
-                              : null,
-                          color: userType == UserType.student
-                              ? null
-                              : (isDark
-                                  ? AppColors.dark700
-                                  : AppColors.gray50),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: userType == UserType.student
-                                ? AppColors.purple600
-                                : (isDark
-                                    ? AppColors.dark500
-                                    : AppColors.gray200),
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '🎓 Student',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: userType == UserType.student
-                                  ? Colors.white
-                                  : (isDark
-                                      ? AppColors.gray400
-                                      : AppColors.gray600),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap:
+                              () => setSheetState(
+                                () => userType = UserType.student,
+                              ),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              gradient:
+                                  userType == UserType.student
+                                      ? AppColors.primaryGradient
+                                      : null,
+                              color:
+                                  userType == UserType.student
+                                      ? null
+                                      : (isDark
+                                          ? AppColors.dark700
+                                          : AppColors.gray50),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color:
+                                    userType == UserType.student
+                                        ? AppColors.purple600
+                                        : (isDark
+                                            ? AppColors.dark500
+                                            : AppColors.gray200),
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '🎓 Student',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color:
+                                      userType == UserType.student
+                                          ? Colors.white
+                                          : (isDark
+                                              ? AppColors.gray400
+                                              : AppColors.gray600),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () =>
-                          setSheetState(() => userType = UserType.employee),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 180),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          gradient: userType == UserType.employee
-                              ? AppColors.primaryGradient
-                              : null,
-                          color: userType == UserType.employee
-                              ? null
-                              : (isDark
-                                  ? AppColors.dark700
-                                  : AppColors.gray50),
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(
-                            color: userType == UserType.employee
-                                ? AppColors.purple600
-                                : (isDark
-                                    ? AppColors.dark500
-                                    : AppColors.gray200),
-                          ),
-                        ),
-                        child: Center(
-                          child: Text(
-                            '💼 Employee',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              color: userType == UserType.employee
-                                  ? Colors.white
-                                  : (isDark
-                                      ? AppColors.gray400
-                                      : AppColors.gray600),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap:
+                              () => setSheetState(
+                                () => userType = UserType.employee,
+                              ),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 180),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            decoration: BoxDecoration(
+                              gradient:
+                                  userType == UserType.employee
+                                      ? AppColors.primaryGradient
+                                      : null,
+                              color:
+                                  userType == UserType.employee
+                                      ? null
+                                      : (isDark
+                                          ? AppColors.dark700
+                                          : AppColors.gray50),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color:
+                                    userType == UserType.employee
+                                        ? AppColors.purple600
+                                        : (isDark
+                                            ? AppColors.dark500
+                                            : AppColors.gray200),
+                              ),
+                            ),
+                            child: Center(
+                              child: Text(
+                                '💼 Employee',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  color:
+                                      userType == UserType.employee
+                                          ? Colors.white
+                                          : (isDark
+                                              ? AppColors.gray400
+                                              : AppColors.gray600),
+                                ),
+                              ),
                             ),
                           ),
                         ),
                       ),
-                    ),
+                    ],
                   ),
-                ]),
-                const SizedBox(height: 24),
-                GradientButton(
-                  label: 'Save Changes',
-                  icon: Icons.save_rounded,
-                  onTap: () async {
-                    final age = int.tryParse(ageCtrl.text.trim()) ?? user.age;
-                    final name = nameCtrl.text.trim();
-                    await FirestoreService().updateUser(user.uid, {
-                      'age': age,
-                      'fullName': name,
-                      'userType': userType.name,
-                    });
-                    await auth.refreshUser();
-                    if (bCtx.mounted) Navigator.pop(bCtx);
-                    if (ctx.mounted) {
-                      ScaffoldMessenger.of(ctx).showSnackBar(
-                        const SnackBar(content: Text('Profile updated!')),
-                      );
-                    }
-                  },
-                ),
-              ],
-            ),
-          );
-        });
+                  const SizedBox(height: 24),
+                  GradientButton(
+                    label: isLoading ? 'Saving...' : 'Save Changes',
+                    icon: Icons.save_rounded,
+                    onTap:
+                        isLoading
+                            ? null
+                            : () async {
+                              setSheetState(() {
+                                isLoading = true;
+                                error = null;
+                              });
+                              try {
+                                final name = nameCtrl.text.trim();
+                                if (name.isEmpty) {
+                                  setSheetState(() {
+                                    error = 'Name cannot be empty';
+                                    isLoading = false;
+                                  });
+                                  return;
+                                }
+                                final age =
+                                    int.tryParse(ageCtrl.text.trim()) ??
+                                    user.age;
+                                await _firestoreSvc.updateUser(user.uid, {
+                                  'age': age,
+                                  'fullName': name,
+                                  'userType': userType.name,
+                                });
+                                await auth.refreshUser();
+                                if (bCtx.mounted) Navigator.pop(bCtx);
+                                if (ctx.mounted) {
+                                  ScaffoldMessenger.of(ctx).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Profile updated!'),
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                setSheetState(() {
+                                  error =
+                                      e.toString().contains('permission-denied')
+                                          ? 'Network or Permission Error. Try again.'
+                                          : e.toString();
+                                  isLoading = false;
+                                });
+                              }
+                            },
+                  ),
+                ],
+              ),
+            );
+          },
+        );
       },
     );
   }
 }
+
+// ─────────────────────────────────────────────
+// Supporting classes
+// ─────────────────────────────────────────────
 
 class _InfoRow {
   final IconData icon;
@@ -633,17 +757,17 @@ class _RatingTile extends StatelessWidget {
       decoration: BoxDecoration(
         color: isDark ? AppColors.dark800 : Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: isDark
-            ? Border.all(color: AppColors.dark600, width: 1)
-            : null,
-        boxShadow: isDark
-            ? null
-            : [
-                BoxShadow(
+        border: isDark ? Border.all(color: AppColors.dark600, width: 1) : null,
+        boxShadow:
+            isDark
+                ? null
+                : [
+                  BoxShadow(
                     color: Colors.black.withAlpha(8),
                     blurRadius: 8,
-                    offset: const Offset(0, 2))
-              ],
+                    offset: const Offset(0, 2),
+                  ),
+                ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -662,12 +786,14 @@ class _RatingTile extends StatelessWidget {
               ),
               RatingBarIndicator(
                 rating: rating.score,
-                itemBuilder: (_, __) =>
-                    const Icon(Icons.star_rounded, color: AppColors.amber400),
+                itemBuilder:
+                    (_, __) => const Icon(
+                      Icons.star_rounded,
+                      color: AppColors.amber400,
+                    ),
                 itemCount: 5,
                 itemSize: 16,
-                unratedColor:
-                    isDark ? AppColors.dark500 : AppColors.gray200,
+                unratedColor: isDark ? AppColors.dark500 : AppColors.gray200,
               ),
             ],
           ),
@@ -685,7 +811,7 @@ class _RatingTile extends StatelessWidget {
           const SizedBox(height: 4),
           Text(
             'From ${rating.serverName}',
-            style: TextStyle(
+            style: const TextStyle(
               fontSize: 11,
               color: AppColors.purple600,
               fontWeight: FontWeight.w600,

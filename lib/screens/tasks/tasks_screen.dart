@@ -310,7 +310,8 @@ class _TasksScreenState extends State<TasksScreen>
             child: TaskCard(
               task: filtered[i],
               onToggle: () => taskProv.toggleComplete(filtered[i].id),
-              onDelete: () => _confirmDelete(ctx, filtered[i].id),
+              // ✅ Use outer `context` so TaskProvider is always accessible
+              onDelete: () => _confirmDelete(context, filtered[i].id),
             ),
           ),
           childCount: filtered.length,
