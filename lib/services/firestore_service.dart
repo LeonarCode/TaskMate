@@ -127,6 +127,24 @@ class FirestoreService {
     return snap.docs.map((doc) => UserModel.fromFirestore(doc)).toList();
   }
 
+  Future<List<UserModel>> getServerMembers(List<String> memberIds) async {
+    if (memberIds.isEmpty) return [];
+    List<UserModel> members = [];
+    for (var i = 0; i < memberIds.length; i += 10) {
+      final chunk = memberIds.sublist(
+        i,
+        i + 10 > memberIds.length ? memberIds.length : i + 10,
+      );
+      final snap =
+          await _db
+              .collection(AppStrings.colUsers)
+              .where(FieldPath.documentId, whereIn: chunk)
+              .get();
+      members.addAll(snap.docs.map((doc) => UserModel.fromFirestore(doc)));
+    }
+    return members;
+  }
+
   Future<void> updateUser(String uid, Map<String, dynamic> data) async {
     await _db.collection(AppStrings.colUsers).doc(uid).update(data);
   }
@@ -199,9 +217,52 @@ class FirestoreService {
     });
   }
 
+  Future<void> leaveServer(String serverId, String uid) async {
+    await _db.collection(AppStrings.colServers).doc(serverId).update({
+      'memberIds': FieldValue.arrayRemove([uid]),
+      'memberCount': FieldValue.increment(-1),
+    });
+  }
+
+  Future<void> deleteServer(String serverId) async {
+    await _db.collection(AppStrings.colServers).doc(serverId).delete();
+  }
+
   Future<void> createServer(ServerModel server) async {
     final docRef = _db.collection(AppStrings.colServers).doc();
     await docRef.set(server.toFirestore());
+  }
+
+  Stream<List<MessageModel>> serverMessagesStream(String serverId) {
+    return _db
+        .collection(AppStrings.colServers)
+        .doc(serverId)
+        .collection(AppStrings.colMessages)
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => MessageModel.fromFirestore(doc)).toList(),
+        );
+  }
+
+  Future<void> sendServerMessage(String serverId, MessageModel message) async {
+    await _db
+        .collection(AppStrings.colServers)
+        .doc(serverId)
+        .collection(AppStrings.colMessages)
+        .add(message.toFirestore());
+  }
+
+  Stream<List<TaskModel>> serverTasksStream(String serverId) {
+    return _db
+        .collection(AppStrings.colTasks)
+        .where('serverId', isEqualTo: serverId)
+        .snapshots()
+        .map(
+          (snap) =>
+              snap.docs.map((doc) => TaskModel.fromFirestore(doc)).toList(),
+        );
   }
 
   // ── Ratings ──────────────────────────────────────────────────────────────────
@@ -215,5 +276,15 @@ class FirestoreService {
           (snap) =>
               snap.docs.map((doc) => RatingModel.fromFirestore(doc)).toList(),
         );
+  }
+
+  Future<void> rateUser(RatingModel rating) async {
+    final docId = '${rating.serverId}_${rating.fromUid}';
+    await _db
+        .collection(AppStrings.colUsers)
+        .doc(rating.toUid)
+        .collection(AppStrings.colRatings)
+        .doc(docId)
+        .set(rating.toFirestore());
   }
 }

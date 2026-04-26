@@ -115,7 +115,25 @@ class MessageBubble extends StatelessWidget {
               ],
             ),
           ),
-          if (isMe) const SizedBox(width: 4),
+          if (isMe) ...[
+            const SizedBox(width: 8),
+            CircleAvatar(
+              radius: 16,
+              backgroundColor: AppColors.purple600.withAlpha(25),
+              backgroundImage: resolvePhoto(message.senderPhotoUrl),
+              child:
+                  message.senderPhotoUrl == null
+                      ? Text(
+                        message.senderName.characters.first.toUpperCase(),
+                        style: TextStyle(
+                          color: AppColors.purple600,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
+                      )
+                      : null,
+            ),
+          ],
         ],
       ),
     );

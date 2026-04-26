@@ -5,9 +5,14 @@ import '../../core/constants.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/task_provider.dart';
 import '../../widgets/gradient_button.dart';
+import 'package:uuid/uuid.dart';
+import '../../models/task_model.dart';
+import '../../services/firestore_service.dart';
+import '../../services/notification_service.dart';
 
 class AddTaskSheet extends StatefulWidget {
-  const AddTaskSheet({super.key});
+  final String? serverId;
+  const AddTaskSheet({super.key, this.serverId});
 
   @override
   State<AddTaskSheet> createState() => _AddTaskSheetState();
@@ -99,17 +104,34 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
 
     try {
       final auth = context.read<AuthProvider>();
-      final taskProv = context.read<TaskProvider>();
       final uid = auth.firebaseUser!.uid;
 
-      await taskProv.addTask(
-        uid: uid,
-        title: _titleCtrl.text.trim(),
-        description: _descCtrl.text.trim(),
-        deadline: _deadline,
-        priority: _priority,
-        hasAlarm: _hasAlarm,
-      );
+      if (widget.serverId != null) {
+        final task = TaskModel(
+          id: const Uuid().v4(),
+          uid: uid,
+          title: _titleCtrl.text.trim(),
+          description: _descCtrl.text.trim(),
+          deadline: _deadline,
+          priority: _priority,
+          hasAlarm: _hasAlarm,
+          serverId: widget.serverId,
+        );
+        await FirestoreService().syncTask(task);
+        if (_hasAlarm) {
+          await NotificationService().scheduleTaskReminders(task);
+        }
+      } else {
+        final taskProv = context.read<TaskProvider>();
+        await taskProv.addTask(
+          uid: uid,
+          title: _titleCtrl.text.trim(),
+          description: _descCtrl.text.trim(),
+          deadline: _deadline,
+          priority: _priority,
+          hasAlarm: _hasAlarm,
+        );
+      }
 
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -292,6 +314,8 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
                             const SizedBox(height: 4),
                             Text(
                               _priorityLabels[i],
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w700,
@@ -339,6 +363,8 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
                         children: [
                           Text(
                             'Enable Reminders',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 14,
                               fontWeight: FontWeight.w700,
@@ -347,6 +373,8 @@ class _AddTaskSheetState extends State<AddTaskSheet> {
                           ),
                           Text(
                             '3 daily reminders, 3 days before deadline',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
                             style: TextStyle(
                               fontSize: 11,
                               color:

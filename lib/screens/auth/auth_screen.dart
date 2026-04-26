@@ -560,8 +560,8 @@ class _AuthScreenState extends State<AuthScreen> with TickerProviderStateMixin {
   }
 
   Widget _buildToggle(bool isDark) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
+    return Wrap(
+      alignment: WrapAlignment.center,
       children: [
         Text(
           _isLogin ? "Don't have an account? " : 'Already have an account? ',

@@ -238,6 +238,8 @@ class _DMTile extends StatelessWidget {
                     children: [
                       Text(
                         other.fullName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
                           fontSize: 16,
                           fontWeight:

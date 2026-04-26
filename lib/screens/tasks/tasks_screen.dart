@@ -115,6 +115,8 @@ class _TasksScreenState extends State<TasksScreen>
                   children: [
                     Text(
                       '$greeting,',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 14,
                         color: isDark ? AppColors.gray400 : AppColors.gray500,
@@ -123,6 +125,8 @@ class _TasksScreenState extends State<TasksScreen>
                     ),
                     Text(
                       name.split(' ').first,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 26,
                         fontWeight: FontWeight.w900,
@@ -209,6 +213,8 @@ class _TasksScreenState extends State<TasksScreen>
           const SizedBox(height: 4),
           Text(
             stat.value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w900,
@@ -217,6 +223,8 @@ class _TasksScreenState extends State<TasksScreen>
           ),
           Text(
             stat.label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: TextStyle(
               fontSize: 10,
               fontWeight: FontWeight.w600,
@@ -277,6 +285,8 @@ class _TasksScreenState extends State<TasksScreen>
                 ),
                 child: Text(
                   _filters[i],
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,

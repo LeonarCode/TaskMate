@@ -310,6 +310,8 @@ class _ServerListTile extends StatelessWidget {
                 children: [
                   Text(
                     server.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w700,

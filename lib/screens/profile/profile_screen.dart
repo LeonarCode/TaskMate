@@ -333,31 +333,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           child: Icon(row.icon, color: row.color, size: 18),
                         ),
                         const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              row.label,
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    isDark
-                                        ? AppColors.gray500
-                                        : AppColors.gray400,
-                                letterSpacing: 0.3,
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                row.label,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      isDark
+                                          ? AppColors.gray500
+                                          : AppColors.gray400,
+                                  letterSpacing: 0.3,
+                                ),
                               ),
-                            ),
-                            Text(
-                              row.value,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color:
-                                    isDark ? Colors.white : AppColors.gray800,
+                              Text(
+                                row.value,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color:
+                                      isDark ? Colors.white : AppColors.gray800,
+                                ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
                       ],
                     ),

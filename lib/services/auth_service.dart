@@ -40,14 +40,76 @@ class AuthService {
 
   // ── Google Sign-In ──────────────────────────────────────────────────────────
   Future<UserCredential?> signInWithGoogle() async {
-    final googleUser = await _googleSignIn.signIn();
-    if (googleUser == null) return null;
-    final googleAuth = await googleUser.authentication;
-    final credential = GoogleAuthProvider.credential(
-      accessToken: googleAuth.accessToken,
-      idToken: googleAuth.idToken,
-    );
-    return _auth.signInWithCredential(credential);
+    try {
+      // Force account picker every time — prevents stale account issues
+      // where a previously signed-in account is reused silently
+      await _googleSignIn.signOut();
+
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null; // User dismissed the picker
+
+      final googleAuth = await googleUser.authentication;
+
+      // Null tokens = SHA-1 not registered or google-services.json is outdated
+      if (googleAuth.accessToken == null || googleAuth.idToken == null) {
+        throw Exception(
+          'Google authentication tokens are null. '
+          'Make sure your SHA-1 fingerprint is added in Firebase Console '
+          'and google-services.json is re-downloaded.',
+        );
+      }
+
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      return await _auth.signInWithCredential(credential);
+    } on FirebaseAuthException catch (e) {
+      switch (e.code) {
+        case 'account-exists-with-different-credential':
+          throw Exception(
+            'An account already exists with this email using a different sign-in method.',
+          );
+        case 'invalid-credential':
+          throw Exception('Invalid credential. Please try again.');
+        case 'network-request-failed':
+          throw Exception('No internet connection. Please check your network.');
+        case 'user-disabled':
+          throw Exception('This account has been disabled.');
+        default:
+          throw Exception('Google Sign-In failed: ${e.message}');
+      }
+    } catch (e) {
+      final msg = e.toString();
+
+      // ApiException: 12501 — user pressed back/cancelled, not an error
+      if (msg.contains('12501')) return null;
+
+      // ApiException: 10 — SHA-1 not registered in Firebase Console
+      if (msg.contains(': 10') || msg.contains('DEVELOPER_ERROR')) {
+        throw Exception(
+          'SHA-1 fingerprint not registered in Firebase Console. '
+          'Run: cd android && ./gradlew signingReport '
+          'then add the SHA-1 to your Firebase project settings.',
+        );
+      }
+
+      // ApiException: 12500 — google-services.json is outdated
+      if (msg.contains('12500')) {
+        throw Exception(
+          'Google Sign-In configuration error. '
+          'Re-download google-services.json from Firebase Console.',
+        );
+      }
+
+      // ApiException: 7 — network error
+      if (msg.contains(': 7')) {
+        throw Exception('No internet connection. Please check your network.');
+      }
+
+      rethrow;
+    }
   }
 
   // ── Profile check ───────────────────────────────────────────────────────────

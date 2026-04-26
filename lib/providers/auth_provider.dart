@@ -70,14 +70,27 @@ class AuthProvider extends ChangeNotifier {
     _setLoading();
     try {
       final cred = await _authService.signInWithGoogle();
+
+      // User cancelled the picker — not an error, just reset state
       if (cred == null) {
         _status = AuthStatus.unauthenticated;
+        _error = null;
         notifyListeners();
         return false;
       }
+
+      // Auth state listener (_init) will handle navigation automatically
+      // No need to manually set status here
       return true;
+    } on FirebaseAuthException catch (e) {
+      // Catch Firebase-specific errors from AuthService
+      _setError(_friendlyError(e.code));
+      return false;
     } catch (e) {
-      _setError('Google sign-in failed');
+      // Surface the specific error message from AuthService
+      // instead of swallowing it with a generic message
+      final msg = e.toString().replaceAll('Exception: ', '');
+      _setError(msg);
       return false;
     }
   }
@@ -147,6 +160,14 @@ class AuthProvider extends ChangeNotifier {
         return 'Password must be at least 6 characters.';
       case 'too-many-requests':
         return 'Too many attempts. Please try again later.';
+      case 'account-exists-with-different-credential':
+        return 'An account already exists with this email using a different sign-in method.';
+      case 'invalid-credential':
+        return 'Invalid credential. Please try again.';
+      case 'network-request-failed':
+        return 'No internet connection. Please check your network.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
       default:
         return 'Authentication failed. Please try again.';
     }

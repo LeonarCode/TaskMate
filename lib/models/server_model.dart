@@ -6,6 +6,8 @@ class ServerModel {
   final String description;
   final String ownerId;
   final List<String> memberIds;
+  final List<String> chats;
+  final List<String> tasks;
   final int iconColorValue;
   final String? iconEmoji;
   final DateTime createdAt;
@@ -17,6 +19,8 @@ class ServerModel {
     this.description = '',
     required this.ownerId,
     this.memberIds = const [],
+    this.chats = const [],
+    this.tasks = const [],
     this.iconColorValue = 0xFF7C3AED,
     this.iconEmoji,
     required this.createdAt,
@@ -31,6 +35,8 @@ class ServerModel {
       description: data['description'] ?? '',
       ownerId: data['ownerId'] ?? '',
       memberIds: List<String>.from(data['memberIds'] ?? []),
+      chats: List<String>.from(data['chats'] ?? []),
+      tasks: List<String>.from(data['tasks'] ?? []),
       iconColorValue: data['iconColorValue'] ?? 0xFF7C3AED,
       iconEmoji: data['iconEmoji'],
       createdAt: (data['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now(),
@@ -43,6 +49,8 @@ class ServerModel {
     'description': description,
     'ownerId': ownerId,
     'memberIds': memberIds,
+    'chats': chats,
+    'tasks': tasks,
     'iconColorValue': iconColorValue,
     'iconEmoji': iconEmoji,
     'createdAt': Timestamp.fromDate(createdAt),
@@ -53,6 +61,8 @@ class ServerModel {
     String? name,
     String? description,
     List<String>? memberIds,
+    List<String>? chats,
+    List<String>? tasks,
     int? iconColorValue,
     String? iconEmoji,
     int? memberCount,
@@ -63,6 +73,8 @@ class ServerModel {
       description: description ?? this.description,
       ownerId: ownerId,
       memberIds: memberIds ?? this.memberIds,
+      chats: chats ?? this.chats,
+      tasks: tasks ?? this.tasks,
       iconColorValue: iconColorValue ?? this.iconColorValue,
       iconEmoji: iconEmoji ?? this.iconEmoji,
       createdAt: createdAt,
